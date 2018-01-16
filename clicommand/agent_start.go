@@ -6,6 +6,8 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/buildkite/agent/experiments"
+
 	"github.com/buildkite/agent/agent"
 	"github.com/buildkite/agent/cliconfig"
 	"github.com/buildkite/agent/logger"
@@ -57,6 +59,7 @@ type AgentStartConfig struct {
 	Debug                        bool     `cli:"debug"`
 	DebugHTTP                    bool     `cli:"debug-http"`
 	Experiments                  []string `cli:"experiment"`
+	Workers                      int      `cli:"workers"`
 	/* Deprecated */
 	MetaData        []string `cli:"meta-data" deprecated-and-renamed-to:"Tags"`
 	MetaDataEC2     bool     `cli:"meta-data-ec2" deprecated-and-renamed-to:"TagsFromEC2"`
@@ -244,6 +247,12 @@ var AgentStartCommand = cli.Command{
 			Hidden: true,
 			EnvVar: "BUILDKITE_AGENT_META_DATA_GCP",
 		},
+		cli.IntFlag{
+			Name:   "workers",
+			Hidden: true,
+			Value:  1,
+			EnvVar: "BUILDKITE_AGENT_WORKERS",
+		},
 	},
 	Action: func(c *cli.Context) {
 		// The configuration will be loaded into this struct
@@ -285,6 +294,10 @@ var AgentStartCommand = cli.Command{
 			}
 		}
 
+		if cfg.Workers > 1 && !experiments.IsEnabled(`MultipleWorkers`) {
+			logger.Fatal("Multiple workers requires the MultipleWorkers experiment to be enabled")
+		}
+
 		// Setup the agent
 		pool := agent.AgentPool{
 			Token:                 cfg.Token,
@@ -296,6 +309,7 @@ var AgentStartCommand = cli.Command{
 			TagsFromGCP:           cfg.TagsFromGCP,
 			WaitForEC2TagsTimeout: ec2TagTimeout,
 			Endpoint:              cfg.Endpoint,
+			Workers:               cfg.Workers,
 			AgentConfiguration: &agent.AgentConfiguration{
 				BootstrapScript:            cfg.BootstrapScript,
 				BuildPath:                  cfg.BuildPath,
